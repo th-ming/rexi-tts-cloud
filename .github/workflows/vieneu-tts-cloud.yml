@@ -34,6 +34,24 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python -c "from vieneu import Vieneu; v=Vieneu(); print('MODEL READY')"
 
+      - name: De-symlink HF cache (ONNX external data fix)
+        run: |
+          python - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.path.expanduser("~/.cache/huggingface/hub"))
+          n = 0
+          for p in root.rglob("*"):
+              if p.is_file() and p.is_symlink():
+                  t = p.with_name(p.name + ".real")
+                  shutil.copyfile(p, t)
+                  os.remove(p)
+                  os.rename(t, p)
+                  n += 1
+          print("materialized", n, "files")
+          PY
+          python -c "from vieneu import Vieneu; v=Vieneu(); print('MODEL READY (real files)')"
+
       - name: Get cloudflared
         run: |
           curl -sL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
