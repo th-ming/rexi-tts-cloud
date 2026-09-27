@@ -1,8 +1,10 @@
 import io
+import os
+import tempfile
 import threading
 import wave
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -51,6 +53,30 @@ def speech(req: SpeechRequest):
             audio = _tts.infer(req.input.strip(), voice=None)
     buf = _to_wav(audio, req.sample_rate)
     return Response(content=buf, media_type="audio/wav")
+
+
+@app.post("/v1/clone")
+async def clone(file: UploadFile = File(...), text: str = Form(...), ref_text: str = Form(None)):
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="text is empty")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="audio file is empty")
+    suffix = os.path.splitext(file.filename or "ref.wav")[1] or ".wav"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(data)
+        tmp.close()
+        with _lock:
+            audio = _tts.infer(text.strip(), ref_audio=tmp.name)
+        return Response(content=_to_wav(audio, None), media_type="audio/wav")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"clone failed: {e}")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
 
 
 def _to_wav(audio, sample_rate: int | None) -> bytes:
