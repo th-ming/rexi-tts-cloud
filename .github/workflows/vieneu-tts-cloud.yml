@@ -1,0 +1,77 @@
+name: vieneu-tts-cloud
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+  push:
+    branches: [ main ]
+
+jobs:
+  serve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache HF models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-vieneu-v3turbo-v1
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install "vieneu==3.8.3" fastapi "uvicorn[standard]"
+
+      - name: Warm model (download once, cached)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python -c "from vieneu import Vieneu; v=Vieneu(); print('MODEL READY')"
+
+      - name: Get cloudflared
+        run: |
+          curl -sL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          ./cloudflared --version
+
+      - name: Serve + tunnel + wire Render backend
+        env:
+          RENDER_KEY: ${{ secrets.RENDER_KEY }}
+        run: |
+          nohup python -m uvicorn app:app --host 127.0.0.1 --port 7860 > server.log 2>&1 &
+          nohup ./cloudflared tunnel --url http://127.0.0.1:7860 --no-autoupdate > cf.log 2>&1 &
+
+          URL=""
+          for i in $(seq 1 90); do
+            sleep 2
+            URL=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' cf.log | head -1)
+            if [ -n "$URL" ]; then break; fi
+          done
+          echo "TUNNEL=$URL"
+          if [ -z "$URL" ]; then echo "NO TUNNEL URL"; tail -40 cf.log; exit 1; fi
+
+          for i in $(seq 1 90); do
+            sleep 2
+            if curl -sf http://127.0.0.1:7860/health; then echo "HEALTH OK"; break; fi
+          done
+          echo "--- voices ---"
+          curl -sf http://127.0.0.1:7860/v1/voices | head -c 400 || true
+          echo
+
+          echo "--- wire render ---"
+          curl -s -X PUT "https://api.render.com/v1/services/srv-dajo7567bikc73crnjg0/env-vars/VIENEU_BASE_URL" \
+            -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
+            -d "{\"value\":\"$URL\"}" | head -c 200 || true
+          echo
+          curl -s -X POST "https://api.render.com/v1/services/srv-dajo7567bikc73crnjg0/deploys" \
+            -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' | head -c 200 || true
+          echo "--- wired, keep alive ---"
+
+          sleep 19800
