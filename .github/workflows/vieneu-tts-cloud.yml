@@ -32,7 +32,14 @@ jobs:
       - name: Warm model (download once, cached)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python -c "from vieneu import Vieneu; v=Vieneu(); print('MODEL READY')"
+        run: |
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          for repo in ("pnnbao-ump/VieNeu-TTS-v3-Turbo", "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX"):
+              print("downloading", repo)
+              p = snapshot_download(repo)
+              print("  ->", p)
+          PY
 
       - name: De-symlink HF cache (ONNX external data fix)
         run: |
