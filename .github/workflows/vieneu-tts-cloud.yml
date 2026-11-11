@@ -89,14 +89,16 @@ jobs:
           curl -sf http://127.0.0.1:7860/v1/voices | head -c 400 || true
           echo
 
-          echo "--- wire render ---"
-          curl -s -X PUT "https://api.render.com/v1/services/srv-dajo7567bikc73crnjg0/env-vars/VIENEU_BASE_URL" \
+          echo "--- wire render (srv-davqgebtqb8s73de1m00 = rexi-ai-backend) ---"
+          CODE=$(curl -s -o /tmp/put.json -w "%{http_code}" -X PUT "https://api.render.com/v1/services/srv-davqgebtqb8s73de1m00/env-vars/VIENEU_BASE_URL" \
             -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
-            -d "{\"value\":\"$URL\"}" | head -c 200 || true
-          echo
-          curl -s -X POST "https://api.render.com/v1/services/srv-dajo7567bikc73crnjg0/deploys" \
+            -d "{\"value\":\"$URL\"}")
+          echo "PUT env -> HTTP $CODE"; head -c 300 /tmp/put.json; echo
+          DCODE=$(curl -s -o /tmp/dep.json -w "%{http_code}" -X POST "https://api.render.com/v1/services/srv-davqgebtqb8s73de1m00/deploys" \
             -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
-            -d '{"clearCache":"do_not_clear"}' | head -c 200 || true
-          echo "--- wired, keep alive ---"
+            -d '{"clearCache":"do_not_clear"}')
+          echo "DEPLOY -> HTTP $DCODE"; head -c 300 /tmp/dep.json; echo
+          if [ "$CODE" != "200" ]; then echo "WIRE FAILED (env PUT=$CODE)"; exit 1; fi
+          echo "--- wired OK, keep alive ---"
 
           sleep 19800
