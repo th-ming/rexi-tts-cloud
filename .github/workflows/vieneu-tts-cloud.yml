@@ -93,12 +93,16 @@ jobs:
           CODE=$(curl -s -o /tmp/put.json -w "%{http_code}" -X PUT "https://api.render.com/v1/services/srv-davqgebtqb8s73de1m00/env-vars/VIENEU_BASE_URL" \
             -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
             -d "{\"value\":\"$URL\"}")
-          echo "PUT env -> HTTP $CODE"; head -c 300 /tmp/put.json; echo
+          echo "PUT VIENEU_BASE_URL -> HTTP $CODE"; head -c 200 /tmp/put.json; echo
+          CODE2=$(curl -s -o /tmp/put2.json -w "%{http_code}" -X PUT "https://api.render.com/v1/services/srv-davqgebtqb8s73de1m00/env-vars/VIENEU_BASE_URL_CLOUD" \
+            -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
+            -d "{\"value\":\"$URL\"}")
+          echo "PUT VIENEU_BASE_URL_CLOUD -> HTTP $CODE2"; head -c 200 /tmp/put2.json; echo
           DCODE=$(curl -s -o /tmp/dep.json -w "%{http_code}" -X POST "https://api.render.com/v1/services/srv-davqgebtqb8s73de1m00/deploys" \
             -H "Authorization: Bearer $RENDER_KEY" -H "Content-Type: application/json" \
             -d '{"clearCache":"do_not_clear"}')
           echo "DEPLOY -> HTTP $DCODE"; head -c 300 /tmp/dep.json; echo
-          if [ "$CODE" != "200" ]; then echo "WIRE FAILED (env PUT=$CODE)"; exit 1; fi
+          if [ "$CODE" != "200" ] || [ "$CODE2" != "200" ]; then echo "WIRE FAILED ($CODE/$CODE2)"; exit 1; fi
           echo "--- wired OK, keep alive ---"
 
           sleep 19800
